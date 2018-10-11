@@ -51,5 +51,5 @@ def plugin_app(parent):
    this.app_frame = FonToolsPanel() #note that you don't have to explicitly specify a root
    this.app_frame.grid() #still have to grid the Frame to its master
    
-   return (this.app_frame)
+   return (None,this.app_frame)
    
