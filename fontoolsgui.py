@@ -7,9 +7,7 @@ except:
   from Tkinter import *
   import ttk
   import Tkinter as tk
-#from tkinter import *
-#import tkinter as tk
-#from tkinter.scrolledtext import ScrolledText
+
 import bgs
 
 
@@ -66,30 +64,6 @@ class FonToolsPanel(tk.Frame):
     def new_window(self,event=None):
         self.app_window = FonToolsGUI(self)
         self.app_window.pack()
-#         self.app_window.title("FON Tools")
-#         nb = ttk.Notebook(self.app_window)
-#         page1 = ttk.Frame(nb)
-#         page2 = ttk.Frame(nb)
-#         nb.add(page1, text='One')
-#         nb.add(page2, text='Two')
-#         nb.pack(expand=1, fill="both")
-#    
-#         self.packetlistframe = ttk.PanedWindow(page1)
-#         self.packetlistframe.treeview = ttk.Treeview(self.packetlistframe,columns=("Timestamp","ServerID","PackageID","PackageSize","PackageData"))
-#         self.packetlistframe.treeview.heading("#0",text="#")
-#         self.packetlistframe.treeview.column("#0",width=60,stretch=NO,anchor=CENTER)
-#         self.packetlistframe.treeview.heading("Timestamp",text="Timestamp",anchor=CENTER)
-#         self.packetlistframe.treeview.column("Timestamp",width=140,stretch=NO,anchor=CENTER)
-#         self.packetlistframe.treeview.heading("ServerID",text="Srv ID",anchor=CENTER)
-#         self.packetlistframe.treeview.column("ServerID",width=50,stretch=NO,anchor=CENTER)
-#         self.packetlistframe.treeview.heading("PackageID",text="Pck ID",anchor=CENTER)
-#         self.packetlistframe.treeview.column("PackageID",width=50,stretch=NO,anchor=CENTER)
-#         self.packetlistframe.treeview.heading("PackageSize",text="Size",anchor=CENTER)
-#         self.packetlistframe.treeview.column("PackageSize",width=40,stretch=NO,anchor=CENTER)
-#         self.packetlistframe.treeview.heading("PackageData",text="Data",anchor=CENTER)
-#         self.packetlistframe.treeview.pack(expand=True, fill='both')
-#         self.packetlistframe.treeview.bind('<<TreeviewSelect>>',self.selectItemCallback)
-#         self.packetlistframe.pack(expand=True, fill='both',side=RIGHT)
 
     def del_window(self,event=None):
         self.app_window.destroy()
