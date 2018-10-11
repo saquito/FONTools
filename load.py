@@ -3,11 +3,9 @@ import Tkinter as tk
 import myNotebook as nb
 from config import config
 import bgs
-from fontoolsgui import FonToolsGUI
+from fontoolsgui import FonToolsPanel
 
 this = sys.modules[__name__]  # For holding module globals
-
-
 
 def plugin_start(plugin_dir):
    """
@@ -16,8 +14,6 @@ def plugin_start(plugin_dir):
    print "I am loaded! My plugin folder is {}".format(plugin_dir.encode("utf-8"))
    # later on your event functions can directly update this.status["text"]
    
-   with open('C:/test.txt','w') as f:
-     f.write(str(dir(this.config)))
    return "Test"
 
 def plugin_stop():
@@ -52,8 +48,8 @@ def plugin_app(parent):
    """
    #label = tk.Label(parent, text="Status:")
    #this.status = tk.Label(parent, anchor=tk.W, text="")
-   this.app_frame = FonToolsGUI() #note that you don't have to explicitly specify a root
+   this.app_frame = FonToolsPanel() #note that you don't have to explicitly specify a root
    this.app_frame.grid() #still have to grid the Frame to its master
-
-   return (None, this.app_frame)
+   
+   return (this.app_frame)
    
