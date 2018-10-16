@@ -28,15 +28,16 @@ EXPANSION_FACTION_THRESHOLD = 6
 EXPANSION_FACTION_MAX = 7
 RETREAT_THRESHOLD = 0.05
 WAR_THRESHOLD = 0.05
-TICK_TIME = "15:30:00"
+TICK_TIME = "19:30:00"
 TIME_FORMAT = '%d-%m-%Y %H:%M:%S'
 DATE_FORMAT = '%Y-%m-%d'
 DEBUG_LEVEL = 0
 LOCAL_JSON_PATH = "LOCAL_JSON"
+CREATE_DATABASE_SQL = os.sep.join((path,"bgs-data.sqlite3.sql"))
 DATABASE = os.sep.join((path,"bgs-data.sqlite3"))
 FACTION_CONTROLLED = "Fathers of Nontime"
 
-print "=========",DATABASE,"========"
+print ("=========",DATABASE,"========")
 
 this.conn = None
 
@@ -80,6 +81,14 @@ def get_db_connection(database=DATABASE):
     this.conn = sqlite3.connect(database)
   return this.conn
 
+def create_database(database=DATABASE):
+  conn = get_db_connection()
+  sql = open(CREATE_DATABASE_SQL,'r').read()
+  c = conn.cursor()
+  for statement in sql.split(";"):
+    print(statement)
+    c.execute(statement)
+  
 def fetch_system(systemName):
   conn = get_db_connection()
   c = conn.cursor()
@@ -260,15 +269,20 @@ def is_update_needed(conn,cur_time = None):
   todays_tick_time = get_todays_tick_time(current_time)
   current_tick_time = get_current_tick_time(current_time)
   next_tick_time = get_next_tick_time(current_time)
+  last_tick_time = get_last_tick_time(cur_time)
   debug("CURRENT_TIME:\t\t{0} [{1}]".format(int(current_time),get_utc_time_from_epoch(current_time)))
   debug("LAST_UPDATE_TIME:\t{0} [{1}]".format(int(last_update_time),get_utc_time_from_epoch(last_update_time)))
   debug("TODAYS_TICK_TIME:\t{0} [{1}]".format(int(todays_tick_time),get_utc_time_from_epoch(todays_tick_time)))
+  debug("LAST_TICK_TIME:\t\t{0} [{1}]".format(int(next_tick_time),get_utc_time_from_epoch(last_tick_time)))
   debug("CURRENT_TICK_TIME:\t{0} [{1}]".format(int(current_tick_time),get_utc_time_from_epoch(current_tick_time)))
   debug("NEXT_TICK_TIME:\t\t{0} [{1}]".format(int(next_tick_time),get_utc_time_from_epoch(next_tick_time)))
+  
 
   if last_update_time == 0:
     return True
-  if current_time > last_update_time and last_update_time < todays_tick_time: 
+  if last_update_time < last_tick_time:
+    return True
+  if current_time > last_update_time and last_update_time < todays_tick_time:
     if current_time < todays_tick_time:
       return False
     else:
@@ -333,7 +347,8 @@ def update_state_entry(timestamp,state_name,state_type,faction_name, trend):
   c.execute("INSERT INTO faction_system_state VALUES",values)
   c.commit()
 
-def update_tick(conn,cur_time = None, local = False, history = False,forced=False):
+def update_tick(cur_time = None, local = False, history = False,forced=False):
+  conn = get_db_connection()
   current_time = get_timestamp(cur_time)
   c = conn.cursor()
   if not forced:
@@ -408,16 +423,16 @@ def update_tick(conn,cur_time = None, local = False, history = False,forced=Fals
                                         systemName,
                                         faction['influence']])
         active_state_entries.append([current_time,faction['state'],'activeState',faction['name'],0])
-        for state in faction['recoveringStates']:
+        for state in faction['pendingStates']:
           pending_state_entries.append([current_time,
                                 state['state'],
-                                "recoveringState",
+                                "pendingState",
                                 faction['name'],
                                 state['trend']])
-        for state in faction['pendingStates']:
+        for state in faction['recoveringStates']:
           recovering_state_entries.append([current_time,
                                 state['state'],
-                                "pendingState",
+                                "recoveringState",
                                 faction['name'],
                                 state['trend']])
       for values in system_faction_entries:
@@ -433,13 +448,32 @@ def update_tick(conn,cur_time = None, local = False, history = False,forced=Fals
             #debug("ENTRY_ALREADY_EXISTS")
             continue
         c.execute("INSERT INTO faction_system VALUES (?,?,?,?)",values)
-        
+
       for values in active_state_entries:
-        c.execute("INSERT INTO faction_state VALUES (?,?,?,?,?,?)",values)
+        print(values)
+        entry_timestamp,entry_state,entry_state_type,entry_faction, entry_trend = values
+        if not c.execute("SELECT date,faction_name,state_type=':state_type' from faction_state WHERE date=:date AND faction_name=':faction' AND state_type=':state_type'",{'date':entry_timestamp,'faction':entry_faction,'state_type':entry_state_type}).fetchall():
+          try:
+            c.execute("INSERT INTO faction_state VALUES (?,?,?,?,?)",values)
+          except:
+            print("State for {0} already updated".format(entry_faction))
       for values in pending_state_entries:
-        c.execute("INSERT INTO faction_state VALUES (?,?,?,?,?,?)",values)
+        print(values)
+        entry_timestamp,entry_state,entry_state_type,entry_faction, entry_trend = values
+        if not c.execute("SELECT date,faction_name,state_type=':state_type' from faction_state WHERE date=:date AND faction_name=':faction' AND state_type=':state_type'",{'date':entry_timestamp,'faction':entry_faction,'state_type':entry_state_type}).fetchall():
+          try:
+            c.execute("INSERT INTO faction_state VALUES (?,?,?,?,?)",values)
+          except:
+            print("State for {0} already updated".format(entry_faction))
       for values in recovering_state_entries:
-        c.execute("INSERT INTO faction_state VALUES (?,?,?,?,?,?)",values)
+        print(values)
+        entry_timestamp,entry_state,entry_state_type,entry_faction, entry_trend = values
+        if not c.execute("SELECT date,faction_name,state_type=':state_type' from faction_state WHERE date=:date AND faction_name=':faction' AND state_type=':state_type'",{'date':entry_timestamp,'faction':entry_faction,'state_type':entry_state_type}).fetchall():
+          print(values)
+          try:
+            c.execute("INSERT INTO faction_state VALUES (?,?,?,?,?)",values)
+          except:
+            print("State for {0} already updated".format(entry_faction))
         
         if history:  
           conn.commit()
@@ -832,7 +866,7 @@ def fresh_hard_update(local = False):
   clean_updates()
   for controlled_system in systems_controlled:
     fill_systems_in_bubble(controlled_system, EXPANSION_RADIUS, local)
-  update_tick(conn,history=False)
+  update_tick(history=False)
   conn.close()
   
 if 0:
@@ -1141,4 +1175,8 @@ if 0:
   for timestamp, state_type, state in g.get_states(conn,state_type="activeState", start_timestamp=0):
     print(get_date_from_epoch(timestamp),state,state_type)
   conn.close()
+
+#create_database()
+#fresh_hard_update()
+#update_tick()
 
