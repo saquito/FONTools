@@ -10,6 +10,9 @@ from collections import defaultdict
 import itertools
 from math import sqrt
 
+this = sys.modules[__name__]
+path = os.path.dirname(this.__file__)
+
 
 IS_FLASK_ENVIRONMENT = False
 
@@ -30,9 +33,12 @@ TIME_FORMAT = '%d-%m-%Y %H:%M:%S'
 DATE_FORMAT = '%Y-%m-%d'
 DEBUG_LEVEL = 0
 LOCAL_JSON_PATH = "LOCAL_JSON"
-DATABASE = "bgs-data.sqlite3"
+DATABASE = os.sep.join((path,"bgs-data.sqlite3"))
 FACTION_CONTROLLED = "Fathers of Nontime"
-conn = None
+
+print "=========",DATABASE,"========"
+
+this.conn = None
 
 def distance(p0,p1):
   x0,y0,z0 = p0
@@ -70,10 +76,9 @@ def get_json_data(filename,request, request_data, local = False):
   return data
 
 def get_db_connection(database=DATABASE):
-  global conn
-  if not conn:
-    conn = sqlite3.connect(database)
-  return conn
+  if not this.conn:
+    this.conn = sqlite3.connect(database)
+  return this.conn
 
 def fetch_system(systemName):
   conn = get_db_connection()
