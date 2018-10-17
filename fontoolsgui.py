@@ -30,12 +30,15 @@ class FonToolsGUI(tk.Toplevel):
       nb.pack(expand=1, fill="both")
       
       self.configuration_frame = ttk.PanedWindow(pageConfiguration)
-      self.configuration_frame.updatedb_btn = ttk.Button(self.configuration_frame,text="Update Database",command=update_tick)
+      self.configuration_frame.updatedb_btn = ttk.Button(self.configuration_frame,text="Update Database",command=self.update_tick)
       self.configuration_frame.updatedb_btn.pack()
       self.configuration_frame.pack(expand=True, fill='both',side=LEFT)
       self.overview_frame = OverviewPanedWindow(pageOverview)
 
       self.conn = bgs.get_db_connection()
+      
+    def update_tick(self):
+      update_tick()
 
 class FonToolsPanel(tk.Frame):
     def __init__(self,master=None):
@@ -103,7 +106,7 @@ class OverviewPanedWindow(tk.PanedWindow):
         system_factions = star_system.get_current_factions(self.conn)
         for faction in system_factions:
           f = bgs.Faction(self.conn,faction)
-          influence = f.get_current_influence_in_system(self.conn, system_name)
+          timestamp,influence = f.get_influence_in_system(self.conn, system_name)[0]
           active_state = f.get_states(self.conn,'activeState')[0][2]
           pending_states = ", ".join([state[2] for state in f.get_states(self.conn,'pendingState')])
           recovering_states = ", ".join([state[2] for state in f.get_states(self.conn,'recoveringState')])
@@ -113,7 +116,7 @@ class OverviewPanedWindow(tk.PanedWindow):
     def selectItemCallback(self,event):
       pass
       
-def update_tick(self):
+def update_tick():
   bgs.update_tick()
 
 def get_controlled_systems():

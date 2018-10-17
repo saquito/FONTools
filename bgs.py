@@ -651,7 +651,7 @@ class Faction:
         return None
     conn = get_db_connection()
     c = conn.cursor()
-    c.execute('SELECT DISTINCT state_name, trend FROM faction_system_state WHERE faction_name = "{0}" AND date ={1} AND state_type="pendingState"'.format(self.name,get_last_update()))
+    c.execute('SELECT DISTINCT state_name, trend FROM faction_state WHERE faction_name = "{0}" AND date ={1} AND state_type="pendingState"'.format(self.name,get_last_update(conn)))
     return c.fetchall()
   
   def get_current_recovering_states(self):
@@ -659,7 +659,7 @@ class Faction:
         return None
     conn = get_db_connection()
     c = conn.cursor()
-    c.execute('SELECT DISTINCT state_name, trend FROM faction_state WHERE faction_name = "{0}" AND date ={1} AND state_type="recoveringState"'.format(self.name,get_last_update()))
+    c.execute('SELECT DISTINCT state_name, trend FROM faction_state WHERE faction_name = "{0}" AND date ={1} AND state_type="recoveringState"'.format(self.name,get_last_update(conn)))
     return c.fetchall()
   
   def get_states(self, conn, state_type=None, start_timestamp = None, end_timestamp = None):
@@ -764,12 +764,13 @@ class System:
     return {"name":faction_name,"state":state}
     
   def get_war_risk(self,threshold = WAR_THRESHOLD):
-    factions = self.get_factions()
+    conn =get_db_connection()
+    factions = self.get_factions(conn)
     factions_in_risk = []
     if factions:
       for faction1,faction2 in itertools.combinations(factions,2):
-        influence1 = faction1.get_current_influence_in_system(self.name)
-        influence2 = faction2.get_current_influence_in_system(self.name)
+        influence1 = Faction(conn,faction1).get_current_influence_in_system(conn,self.name)
+        influence2 = Faction(conn,faction2).get_current_influence_in_system(conn,self.name)
         if influence1 and influence2:
           if abs(influence1 - influence2) < threshold:
             factions_in_risk.append([faction1,faction2])
@@ -805,7 +806,7 @@ def get_factions_with_retreat_risk(threshold = RETREAT_THRESHOLD):
       for system in risked:
         system_name, influence = system
         if not faction.name.startswith(system_name):
-          ret_risked.append({"faction":faction.name,"system":system_name,"influence":influence, "state":faction.state})
+          ret_risked.append({"faction":faction.name,"system":system_name,"influence":influence, "state":faction.get_state(conn)})
   return ret_risked
 
 def get_factions_with_expansion_risk(threshold = EXPANSION_THRESHOLD):
@@ -815,8 +816,7 @@ def get_factions_with_expansion_risk(threshold = EXPANSION_THRESHOLD):
     if risked:
       for system in risked:
         system_name, influence = system
-        if not faction.name.startswith(system_name):
-          ret_risked.append({"faction":faction.name,"system":system_name,"influence":influence, "state":faction.get_state(conn)})
+        ret_risked.append({"faction":faction.name,"system":system_name,"influence":influence, "state":faction.get_state(conn)})
   return ret_risked
 
 def get_trend_text(trend):
@@ -832,30 +832,33 @@ def get_retreat_risk_report(threshold = RETREAT_THRESHOLD):
   
   report += "The following factions are in risk of enter in state of Retreat:\n"
   for risk in get_factions_with_retreat_risk(threshold):
-    pending_states = ", ".join(["{0} ({1})".format(pending_state,get_trend_text(trend)) for pending_state, trend in Faction(risk['faction']).get_current_pending_states()])
+    pending_states = ", ".join(["{0} ({1})".format(pending_state, get_trend_text(trend)) for pending_state, trend in Faction(conn,risk['faction']).get_current_pending_states()])
     if not pending_states:
       pending_states = "None"
-    recovering_states = ", ".join(["{0} ({1})".format(recovering_state,get_trend_text(trend)) for recovering_state, trend in Faction(risk['faction']).get_current_recovering_states()])
+    recovering_states = ", ".join(["{0} ({1})".format(recovering_state,get_trend_text(trend)) for recovering_state, trend in Faction(conn,risk['faction']).get_current_recovering_states()])
     if not recovering_states:
       recovering_states = "None"
   
-    report += "'{0}' in system '{1}' (Influence: {2:.3g} %, State: {3}, Pending: {4}, Recovering: {5}, Distance: {6} lys)\n".format(risk['faction'],risk['system'],risk['influence']*100.0,risk['state'], pending_states, recovering_states,System(risk['system']).distance)
+    report += "'{0}' in system '{1}' (Influence: {2:.3g} %, State: {3}, Pending: {4}, Recovering: {5}, Distance: {6} lys)\n".format(risk['faction'],risk['system'],risk['influence']*100.0,risk['state'], pending_states, recovering_states,System(conn,risk['system']).distance)
   return report
 
 def get_war_risk_report(threshold = WAR_THRESHOLD):
+  conn = get_db_connection()
   report = "\n" + "*"*10 + "WAR RISK REPORT" + "*"*10 + "\n"
   report += "The following factions are in risk of enter in state of War:\n"
-  for system in System.get_all_systems():
-    for faction1, faction2 in system.get_war_risk(threshold):
-      report += "'{0}' ({1:.2f}%) versus '{2}' ({3:.2f}%) in '{4}'\n".format(faction1.name, faction1.get_current_influence_in_system(system.name)*100.0,
-                                                                  faction2.name,faction2.get_current_influence_in_system(system.name)*100.0,system.name)
+  for system in System.get_all_systems(conn):
+    for faction1_name, faction2_name in system.get_war_risk(threshold):
+      faction1,faction2 = Faction(conn,faction1_name), Faction(conn,faction2_name)
+      report += "'{0}' ({1:.2f}%) versus '{2}' ({3:.2f}%) in '{4}'\n".format(faction1.name, faction1.get_current_influence_in_system(conn,system.name)*100.0,
+                                                                  faction2.name,faction2.get_current_influence_in_system(conn,system.name)*100.0,system.name)
   return report
 
-def get_expansion_risk_report(conn,threshold = EXPANSION_THRESHOLD):
+def get_expansion_risk_report(threshold = EXPANSION_THRESHOLD):
+  conn = get_db_connection()
   report = "\n" + "*"*10 + "EXPANSION RISK REPORT" + "*"*10 + "\n"
   report += "The following factions are in risk of enter in state of Expansion:\n"
   for risk in get_factions_with_expansion_risk(threshold):
-    report += "'{0}' from system '{1}' (Influence: {2:.3g} %, State: {3}, Distance: {4} lys)\n".format(risk['faction'],risk['system'],risk['influence']*100.0,risk['state'][0][1], System(conn,risk['system']).distance)
+    report += "'{0}' from system '{1}' (Influence: {2:.3g} %, State: {3}, Distance: {4} lys)\n".format(risk['faction'],risk['system'],risk['influence']*100.0,risk['state'][0][2], System(conn,risk['system']).distance)
   return report
 
 
@@ -1178,5 +1181,13 @@ if 0:
 
 #create_database()
 #fresh_hard_update()
-#update_tick()
-
+if __name__ == "__main__":
+  update_tick()
+  f = Faction(conn,"Fathers of Nontime")
+  print(f.get_influence_in_system(conn, "Naunin"))
+  print("========== RETREAT ============")
+  print(get_retreat_risk_report())
+  print("========== EXPANSION ============")
+  print(get_expansion_risk_report())
+  print("========== WAR ============")
+  print(get_war_risk_report())
