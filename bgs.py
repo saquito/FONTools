@@ -100,7 +100,7 @@ def fetch_system(systemName):
   return data
 
 def fetch_faction(factionName):
-  c = get_db_cursor())
+  c = get_db_cursor()
   c.execute("SELECT * FROM Factions WHERE faction_name=:name",{'name':factionName})
   data = c.fetchone()
   return data
