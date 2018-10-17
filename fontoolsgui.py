@@ -101,15 +101,15 @@ class OverviewPanedWindow(tk.PanedWindow):
     def update_overview(self,system_name):
       self.treeview.delete(*self.treeview.get_children())
       i=0
-      star_system = bgs.System(self.conn,system_name)
+      star_system = bgs.System(system_name)
       if star_system:
-        system_factions = star_system.get_current_factions(self.conn)
+        system_factions = star_system.get_current_factions()
         for faction in system_factions:
-          f = bgs.Faction(self.conn,faction)
-          timestamp,influence = f.get_influence_in_system(self.conn, system_name)[0]
-          active_state = f.get_states(self.conn,'activeState')[0][2]
-          pending_states = ", ".join([state[2] for state in f.get_states(self.conn,'pendingState')])
-          recovering_states = ", ".join([state[2] for state in f.get_states(self.conn,'recoveringState')])
+          f = bgs.Faction(faction)
+          timestamp,influence = f.get_influence_in_system(system_name)[0]
+          active_state = f.get_states('activeState')[0][2]
+          pending_states = ", ".join([state[2] for state in f.get_states('pendingState')])
+          recovering_states = ", ".join([state[2] for state in f.get_states('recoveringState')])
           item = self.treeview.insert("", END, text=str(i), values=(f.name,influence*100.0,active_state,pending_states,recovering_states, "YES" if f.is_player else "NO",""))
           i=i+1
       

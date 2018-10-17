@@ -9,6 +9,7 @@ import shutil
 from collections import defaultdict
 import itertools
 from math import sqrt
+from pprint import pprint
 
 this = sys.modules[__name__]
 path = os.path.dirname(this.__file__)
@@ -81,24 +82,25 @@ def get_db_connection(database=DATABASE):
     this.conn = sqlite3.connect(database)
   return this.conn
 
+def get_db_cursor(database=DATABASE):
+  conn = get_db_connection(database)
+  return conn.cursor()
+
 def create_database(database=DATABASE):
-  conn = get_db_connection()
   sql = open(CREATE_DATABASE_SQL,'r').read()
-  c = conn.cursor()
+  c = get_db_cursor(database)
   for statement in sql.split(";"):
     print(statement)
     c.execute(statement)
   
 def fetch_system(systemName):
-  conn = get_db_connection()
-  c = conn.cursor()
+  c = get_db_cursor()
   c.execute("SELECT * FROM Systems WHERE system_name=:name",{'name':systemName})
   data = c.fetchone()
   return data
 
 def fetch_faction(factionName):
-  conn = get_db_connection()
-  c = conn.cursor()
+  c = get_db_cursor())
   c.execute("SELECT * FROM Factions WHERE faction_name=:name",{'name':factionName})
   data = c.fetchone()
   return data
@@ -169,8 +171,7 @@ def fill_systems_in_bubble(systemName, radius = EXPANSION_RADIUS, local = False)
   conn.commit()
 
 def get_systems(criteria = None):
-    conn = get_db_connection()
-    c = conn.cursor()
+    c = get_db_cursor()
     if criteria:
       c.execute("SELECT * FROM Systems WHERE {0}".format(criteria))
     else:
@@ -255,7 +256,7 @@ def get_todays_tick_time(cur_time = None):
   todays_tick_time = " ".join((day_time,TICK_TIME))
   return get_epoch_from_utc_time(todays_tick_time)
 
-def is_update_needed(conn,cur_time = None):
+def is_update_needed(cur_time = None):
   current_time = time.time()
   if cur_time:
     if isinstance(cur_time,str):
@@ -265,7 +266,7 @@ def is_update_needed(conn,cur_time = None):
     else:
       print("DATE FORMAT ERROR")
       return False
-  last_update_time = get_last_update(conn)
+  last_update_time = get_last_update()
   todays_tick_time = get_todays_tick_time(current_time)
   current_tick_time = get_current_tick_time(current_time)
   next_tick_time = get_next_tick_time(current_time)
@@ -326,7 +327,8 @@ def time_functions_test():
     debug("UPDATE NEEDED: {0}".format(is_update_needed(get_timestamp(test_check_time))))
     debug('*'*80)
 
-def get_last_update(c):
+def get_last_update():
+  c = get_db_cursor()
   last_update = c.execute("SELECT MAX(timestamp) FROM ticks").fetchone()[0]
   if not last_update:
     last_update = 0
@@ -352,7 +354,7 @@ def update_tick(cur_time = None, local = False, history = False,forced=False):
   current_time = get_timestamp(cur_time)
   c = conn.cursor()
   if not forced:
-    if not is_update_needed(conn,current_time) and not history:
+    if not is_update_needed(current_time) and not history:
       debug("UPDATE NOT NEEDED")
       return False
     else:
@@ -481,12 +483,11 @@ def update_tick(cur_time = None, local = False, history = False,forced=False):
   return True
 
 def get_system_status(systemName,timestamp  = None):
-  conn = get_db_connection()
   if not timestamp:
     timestamp = get_last_update()
   else:
     timestamp = get_timestamp(timestamp)
-  c = conn.cursor()
+    c = get_db_cursor()
   c.execute("""SELECT DISTINCT faction_system.date,
                         faction_system.system,
                         faction_system.name,
@@ -502,10 +503,9 @@ def get_system_status(systemName,timestamp  = None):
   return [systemName,c.fetchall()]
 
 def get_system_status_timespan(systemName, initialTimestamp,endTimestamp = None):
-  conn = get_db_connection()
   if not endTimestamp:
     endTimestamp = get_time()
-  c = conn.cursor()
+  c = get_db_cursor()
   query = '''SELECT DISTINCT faction_system.date,
                         faction_system.system,
                         faction_system.name,
@@ -523,15 +523,14 @@ def get_system_status_timespan(systemName, initialTimestamp,endTimestamp = None)
   return [systemName,[ entry for entry in all_entries if entry[0] >= initialTimestamp and entry[0] < endTimestamp]]
 
 def get_all_entries():
-  conn = get_db_connection()
-  c = conn.cursor()
+  c = get_db_cursor()
   c.execute("SELECT * FROM faction_system")  
   return c.fetchall()
 
 
 class Faction:
-  def __init__(self,conn,faction_name):
-    c = conn.cursor()
+  def __init__(self,faction_name):
+    c = get_db_cursor()
     self.name = faction_name
     self.ok = False
     self.json = ""
@@ -560,7 +559,7 @@ class Faction:
     c = conn.cursor()
     c.execute('SELECT faction_name FROM Factions{0}'.format(criteria_sql))
     factions = c.fetchall()
-    factions = [Faction(conn,faction[0]) for faction in factions]
+    factions = [Faction(faction[0]) for faction in factions]
     return factions
   
   def get_retreat_risk(self,threshold = RETREAT_THRESHOLD):
@@ -596,14 +595,13 @@ class Faction:
   def get_systems(self, start_timestamp = None, end_timestamp = None):
     if not self.ok:
         return None  
-    conn = get_db_connection()
-    c = conn.cursor()
+    c = get_db_cursor()
     if start_timestamp == None:
-      start_timestamp = get_last_update(conn)
+      start_timestamp = get_last_update()
     else:
       start_timestamp = get_time(start_timestamp)
     if end_timestamp == None:
-      end_timestamp = get_last_update(conn)
+      end_timestamp = get_last_update()
       
     else:
       end_timestamp = get_time(end_timestamp)
@@ -611,29 +609,28 @@ class Faction:
     systems = [system[0] for system in c.fetchall() ]
     return(systems)
   
-  def get_current_influence_in_system(self,conn, system_requested):
+  def get_current_influence_in_system(self, system_requested):
     if not self.ok:
       return None
     if isinstance(system_requested,System):
       system_requested = system_requested.name
-    c = conn.cursor()
-    c.execute('SELECT influence FROM faction_system WHERE system = "{0}" AND name = "{1}" ORDER BY date'.format(system_requested,self.name,get_last_update(c)))  
+    c = get_db_cursor()
+    c.execute('SELECT influence FROM faction_system WHERE system = "{0}" AND name = "{1}" ORDER BY date'.format(system_requested,self.name,get_last_update()))  
     influence_data = c.fetchone()
     if influence_data and len(influence_data) > 0: 
       return influence_data[0]
     return None
   
-  def get_influence_in_system(self,conn, system_requested, start_timestamp = None, end_timestamp = None):
+  def get_influence_in_system(self,system_requested, start_timestamp = None, end_timestamp = None):
     if not self.ok:
       return None
-    conn = get_db_connection()
-    c = conn.cursor()
+    c = get_db_cursor()
     if start_timestamp == None:
-      start_timestamp = get_last_update(c)
+      start_timestamp = get_last_update()
     else:
       start_timestamp = get_time(start_timestamp)
     if end_timestamp == None:
-      end_timestamp = get_last_update(c)
+      end_timestamp = get_last_update()
       
     else:
       end_timestamp = get_time(end_timestamp)
@@ -649,23 +646,21 @@ class Faction:
   def get_current_pending_states(self):
     if not self.ok:
         return None
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute('SELECT DISTINCT state_name, trend FROM faction_state WHERE faction_name = "{0}" AND date ={1} AND state_type="pendingState"'.format(self.name,get_last_update(conn)))
+    c = get_db_cursor()
+    c.execute('SELECT DISTINCT state_name, trend FROM faction_state WHERE faction_name = "{0}" AND date ={1} AND state_type="pendingState"'.format(self.name,get_last_update()))
     return c.fetchall()
   
   def get_current_recovering_states(self):
     if not self.ok:
         return None
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute('SELECT DISTINCT state_name, trend FROM faction_state WHERE faction_name = "{0}" AND date ={1} AND state_type="recoveringState"'.format(self.name,get_last_update(conn)))
+    c = get_db_cursor()
+    c.execute('SELECT DISTINCT state_name, trend FROM faction_state WHERE faction_name = "{0}" AND date ={1} AND state_type="recoveringState"'.format(self.name,get_last_update()))
     return c.fetchall()
   
-  def get_states(self, conn, state_type=None, start_timestamp = None, end_timestamp = None):
+  def get_states(self, state_type=None, start_timestamp = None, end_timestamp = None):
     c= conn.cursor()
     if start_timestamp == None:
-      start_timestamp = get_last_update(c)
+      start_timestamp = get_last_update()
     else:
       start_timestamp = get_time(start_timestamp)
     if end_timestamp == None:
@@ -677,12 +672,12 @@ class Faction:
          
     return states
   
-  def get_state_history(self, conn,start_timestamp = None, end_timestamp = None):
-    result = self.get_states(conn)
+  def get_state_history(self,start_timestamp = None, end_timestamp = None):
+    result = self.get_states()
     return result
   
-  def get_state(self, conn):
-    result = self.get_states(conn)
+  def get_state(self):
+    result = self.get_states()
     if isinstance(result[0],sqlite3.Row):
       result = tuple(result[0])
     return result
@@ -690,14 +685,13 @@ class Faction:
   def get_status_in_system(self,system_name, start_timestamp = None, end_timestamp = None):
     if not self.ok:
         return None
-    conn = get_db_connection()
-    c = conn.cursor()
+    c = get_db_cursor()
     if start_timestamp == None:
-      start_timestamp = get_last_update(conn)
+      start_timestamp = get_last_update()
     else:
       start_timestamp = get_time(start_timestamp)
     if end_timestamp == None:
-      end_timestamp = get_last_update(conn)
+      end_timestamp = get_last_update()
     else:
       end_timestamp = get_time(end_timestamp)
 
@@ -717,10 +711,11 @@ class Faction:
     return timestamps
 
 class System:
-  def __init__(self,c,system_name):
+  def __init__(self,system_name):
     self.name = system_name
     self.ok = False
     self.json = ""
+    c = get_db_cursor()
 #    try:
     result = c.execute('SELECT population,economy,distance,x,y,z FROM Systems WHERE name = "{0}"'.format(system_name)).fetchone()
     self.population, self.economy, self.distance, self.x, self.y, self.z = result
@@ -731,28 +726,28 @@ class System:
       self.json =  {"name":self.name,"population":self.population,"economy":self.economy,"distance":self.distance}
   
   @classmethod
-  def get_all_systems(cls,conn):
-    c = conn.cursor()
+  def get_all_systems(cls):
+    c = get_db_cursor()
     c.execute('SELECT name FROM Systems')
-    factions = [System(conn,faction[0]) for faction in c.fetchall()]
+    factions = [System(faction[0]) for faction in c.fetchall()]
     return factions 
   
-  def get_closest_systems(self,conn,limit = None):
+  def get_closest_systems(self,limit = None):
     if not self.ok:
       return None
-    all_systems = System.get_all_systems(conn)
+    all_systems = System.get_all_systems()
     system_list = []
     for near_system in all_systems:
       system_list.append({"system":near_system.name,"distance":distance([near_system.x,near_system.y,near_system.z],[self.x,self.y,self.z])})
     return sorted(system_list,key=lambda x:[x["distance"]])[1:limit]
   
-  def get_next_expansion_system(self,conn):
-    for candidate in self.get_closest_systems(conn):
-      candidate_system = System(conn,candidate["system"])
-      if len(candidate_system.get_factions(conn)) <= EXPANSION_FACTION_THRESHOLD:
+  def get_next_expansion_system(self):
+    for candidate in self.get_closest_systems():
+      candidate_system = System(candidate["system"])
+      if len(candidate_system.get_factions()) <= EXPANSION_FACTION_THRESHOLD:
         return({"system":candidate["system"],"distance":candidate["distance"]})
       else:
-        print(candidate,"- NO:",len(candidate_system.get_factions(conn)),"factions")
+        print(candidate,"- NO:",len(candidate_system.get_factions()),"factions")
   
   def get_controller_and_state(self,c,timestamp = None):
     if not self.ok:
@@ -764,24 +759,23 @@ class System:
     return {"name":faction_name,"state":state}
     
   def get_war_risk(self,threshold = WAR_THRESHOLD):
-    conn =get_db_connection()
-    factions = self.get_factions(conn)
+    factions = self.get_factions()
     factions_in_risk = []
     if factions:
       for faction1,faction2 in itertools.combinations(factions,2):
-        influence1 = Faction(conn,faction1).get_current_influence_in_system(conn,self.name)
-        influence2 = Faction(conn,faction2).get_current_influence_in_system(conn,self.name)
+        influence1 = Faction(faction1).get_current_influence_in_system(self.name)
+        influence2 = Faction(faction2).get_current_influence_in_system(self.name)
         if influence1 and influence2:
           if abs(influence1 - influence2) < threshold:
             factions_in_risk.append([faction1,faction2])
     return factions_in_risk
       
-  def get_factions(self, conn, start_timestamp = None, end_timestamp = None):
+  def get_factions(self, start_timestamp = None, end_timestamp = None):
     if not self.ok:
       return None
-    c = conn.cursor()
+    c = get_db_cursor()
     if start_timestamp == None:
-      start_timestamp = get_last_update(c)
+      start_timestamp = get_last_update()
     else:
       start_timestamp = get_time(start_timestamp)
     if end_timestamp == None:
@@ -792,8 +786,8 @@ class System:
     factions = [tuple(faction)[0] for faction in c.fetchall()]
     return factions
   
-  def get_current_factions(self,conn, start_timestamp = None, end_timestamp = None):
-    return self.get_factions(conn,start_timestamp,end_timestamp)
+  def get_current_factions(self, start_timestamp = None, end_timestamp = None):
+    return self.get_factions(start_timestamp,end_timestamp)
     
   def __repr__(self):
     return str(self.json)
@@ -806,7 +800,7 @@ def get_factions_with_retreat_risk(threshold = RETREAT_THRESHOLD):
       for system in risked:
         system_name, influence = system
         if not faction.name.startswith(system_name):
-          ret_risked.append({"faction":faction.name,"system":system_name,"influence":influence, "state":faction.get_state(conn)})
+          ret_risked.append({"faction":faction.name,"system":system_name,"influence":influence, "state":faction.get_state()})
   return ret_risked
 
 def get_factions_with_expansion_risk(threshold = EXPANSION_THRESHOLD):
@@ -816,7 +810,7 @@ def get_factions_with_expansion_risk(threshold = EXPANSION_THRESHOLD):
     if risked:
       for system in risked:
         system_name, influence = system
-        ret_risked.append({"faction":faction.name,"system":system_name,"influence":influence, "state":faction.get_state(conn)})
+        ret_risked.append({"faction":faction.name,"system":system_name,"influence":influence, "state":faction.get_state()})
   return ret_risked
 
 def get_trend_text(trend):
@@ -828,43 +822,46 @@ def get_trend_text(trend):
     return "-"
 
 def get_retreat_risk_report(threshold = RETREAT_THRESHOLD):
+  data = []
   report = "\n" + "*"*10 + "RETREAT RISK REPORT" + "*"*10 + "\n\n"
-  
   report += "The following factions are in risk of enter in state of Retreat:\n"
   for risk in get_factions_with_retreat_risk(threshold):
-    pending_states = ", ".join(["{0} ({1})".format(pending_state, get_trend_text(trend)) for pending_state, trend in Faction(conn,risk['faction']).get_current_pending_states()])
+    pending_states = ", ".join(["{0} ({1})".format(pending_state, get_trend_text(trend)) for pending_state, trend in Faction(risk['faction']).get_current_pending_states()])
     if not pending_states:
       pending_states = "None"
-    recovering_states = ", ".join(["{0} ({1})".format(recovering_state,get_trend_text(trend)) for recovering_state, trend in Faction(conn,risk['faction']).get_current_recovering_states()])
+    recovering_states = ", ".join(["{0} ({1})".format(recovering_state,get_trend_text(trend)) for recovering_state, trend in Faction(risk['faction']).get_current_recovering_states()])
     if not recovering_states:
       recovering_states = "None"
-  
-    report += "'{0}' in system '{1}' (Influence: {2:.3g} %, State: {3}, Pending: {4}, Recovering: {5}, Distance: {6} lys)\n".format(risk['faction'],risk['system'],risk['influence']*100.0,risk['state'], pending_states, recovering_states,System(conn,risk['system']).distance)
-  return report
+    data.append([risk['faction'],risk['system'],risk['influence'],risk['state'][0][2], pending_states, recovering_states,System(risk['system']).distance])
+    report += "'{0}' in system '{1}' (Influence: {2:.3g} %, State: {3}, Pending: {4}, Recovering: {5}, Distance: {6} lys)\n".format(risk['faction'],risk['system'],risk['influence']*100.0,risk['state'], pending_states, recovering_states,System(risk['system']).distance)
+  return data
 
 def get_war_risk_report(threshold = WAR_THRESHOLD):
+  data = []
   conn = get_db_connection()
   report = "\n" + "*"*10 + "WAR RISK REPORT" + "*"*10 + "\n"
   report += "The following factions are in risk of enter in state of War:\n"
-  for system in System.get_all_systems(conn):
+  for system in System.get_all_systems():
     for faction1_name, faction2_name in system.get_war_risk(threshold):
-      faction1,faction2 = Faction(conn,faction1_name), Faction(conn,faction2_name)
-      report += "'{0}' ({1:.2f}%) versus '{2}' ({3:.2f}%) in '{4}'\n".format(faction1.name, faction1.get_current_influence_in_system(conn,system.name)*100.0,
-                                                                  faction2.name,faction2.get_current_influence_in_system(conn,system.name)*100.0,system.name)
-  return report
+      faction1,faction2 = Faction(faction1_name), Faction(faction2_name)
+      data.append([faction1.name, faction1.get_current_influence_in_system(system.name),
+                                                                  faction2.name,faction2.get_current_influence_in_system(system.name),system.name])
+      report += "'{0}' ({1:.2f}%) versus '{2}' ({3:.2f}%) in '{4}'\n".format(faction1.name, faction1.get_current_influence_in_system(system.name),
+                                                                  faction2.name,faction2.get_current_influence_in_system(system.name),system.name)
+  return data
 
 def get_expansion_risk_report(threshold = EXPANSION_THRESHOLD):
+  data = []
   conn = get_db_connection()
   report = "\n" + "*"*10 + "EXPANSION RISK REPORT" + "*"*10 + "\n"
-  report += "The following factions are in risk of enter in state of Expansion:\n"
   for risk in get_factions_with_expansion_risk(threshold):
-    report += "'{0}' from system '{1}' (Influence: {2:.3g} %, State: {3}, Distance: {4} lys)\n".format(risk['faction'],risk['system'],risk['influence']*100.0,risk['state'][0][2], System(conn,risk['system']).distance)
-  return report
+    data.append([risk['faction'],risk['system'],risk['influence'],risk['state'][0][2], System(risk['system']).distance])
+  return data
 
 
 systems_controlled = ["Naunin"]
 def fresh_hard_update(local = False):
-  conn = sqlite3.connect(DATABASE)
+  conn = get_db_connection()
   clean_fixed_tables()
   clean_updates()
   for controlled_system in systems_controlled:
@@ -990,11 +987,11 @@ def fetch_system_factions(systemName, local = False):
       c.execute("INSERT INTO Factions VALUES (?,?,?,?,?)",values)
   conn.commit()
  
-def update_tick2(conn,cur_time = None, local = False, history = False,forced=False):
+def update_tick2(cur_time = None, local = False, history = False,forced=False):
   current_time = get_timestamp(cur_time)
   c = conn.cursor()
   if not forced:
-    if not is_update_needed(conn,current_time) and not history:
+    if not is_update_needed(current_time) and not history:
       debug("UPDATE NOT NEEDED")
       return False
     else:
@@ -1117,20 +1114,20 @@ def update_tick2(conn,cur_time = None, local = False, history = False,forced=Fal
   conn.commit()
   return True
  
-def default_expansion_filter(conn,systems,target):
-  expansion_systems= [exp_system for exp_system in systems if (exp_system == target) or (len(System(conn,exp_system).get_factions(conn)) < 7)]
+def default_expansion_filter(systems,target):
+  expansion_systems= [exp_system for exp_system in systems if (exp_system == target) or (len(System(exp_system).get_factions()) < 7)]
   return expansion_systems
 
-def get_next_target(conn,origin,target,expansion_filter=default_expansion_filter):
+def get_next_target(origin,target,expansion_filter=default_expansion_filter):
   systems = [sys[0] for sys in get_systems()]
   path = [origin]
   found = False
   current = origin
   systems.remove(origin)
   while not found:
-    closest = System(conn,current).get_closest_systems(conn)
+    closest = System(current).get_closest_systems()
     closest_list =  [valid["system"] for valid in closest if valid["system"] not in path]
-    closest_list = expansion_filter(conn, closest_list,target)
+    closest_list = expansion_filter(closest_list,target)
     closest_list = [valid_system for valid_system in closest_list if (valid_system in systems) or (valid_system == target)]
     current = closest_list[0]
     if(current == target):
@@ -1145,7 +1142,7 @@ def get_next_target(conn,origin,target,expansion_filter=default_expansion_filter
 if 0:
   if not IS_FLASK_ENVIRONMENT:
     conn = sqlite3.connect(DATABASE)
-    print(get_next_target(conn,"Naunin", "Belanit"))
+    print(get_next_target("Naunin", "Belanit"))
     conn.close()
     exit(0) 
 
@@ -1155,27 +1152,27 @@ if 0:
   #fetch_bubble("Naunin")
   #fetch_bubble("Smethells 1")
   #clean_updates()
-  #update_tick2(conn)
+  #update_tick2()
   result =[]
-  star_system = System(conn,"Juipek")
-  system_factions = star_system.get_current_factions(conn)
+  star_system = System("Juipek")
+  system_factions = star_system.get_current_factions()
   for faction in system_factions:
-    f = Faction(conn,faction)
+    f = Faction(faction)
     print(f)
     if f:
-      state = f.get_state(conn)
-      influence = f.get_current_influence_in_system(conn,star_system)
+      state = f.get_state()
+      influence = f.get_current_influence_in_system(star_system)
       if state and influence:
         faction_dict = {"name":faction,"state":state,"influence":"{0:.2f}".format(influence*100.0)}
         result.append(faction_dict)
   get_days(1527852431,1517745656)
-  print(get_last_update(conn))
+  print(get_last_update())
   
   
-  g = Faction(conn,"Fathers of Nontime")
-  for timestamp, influence in g.get_influence_in_system(conn,"Naunin", start_timestamp=0):
+  g = Faction("Fathers of Nontime")
+  for timestamp, influence in g.get_influence_in_system("Naunin", start_timestamp=0):
     print(get_date_from_epoch(timestamp),influence)
-  for timestamp, state_type, state in g.get_states(conn,state_type="activeState", start_timestamp=0):
+  for timestamp, state_type, state in g.get_states(state_type="activeState", start_timestamp=0):
     print(get_date_from_epoch(timestamp),state,state_type)
   conn.close()
 
@@ -1183,11 +1180,11 @@ if 0:
 #fresh_hard_update()
 if __name__ == "__main__":
   update_tick()
-  f = Faction(conn,"Fathers of Nontime")
-  print(f.get_influence_in_system(conn, "Naunin"))
+  f = Faction("Fathers of Nontime")
+  print(f.get_influence_in_system( "Naunin"))
   print("========== RETREAT ============")
-  print(get_retreat_risk_report())
+  pprint(get_retreat_risk_report())
   print("========== EXPANSION ============")
-  print(get_expansion_risk_report())
+  pprint(get_expansion_risk_report())
   print("========== WAR ============")
-  print(get_war_risk_report())
+  pprint(get_war_risk_report())
