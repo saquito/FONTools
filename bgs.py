@@ -201,7 +201,7 @@ def get_days(timestamp1,timestamp2):
   d1 = datetime.date(*params1)
   d2 = datetime.date(*params2)
   delta = d2 - d1
-  print(abs(delta.days))
+  return abs(delta.days)
 
 def get_time(cur_time = None):
   current_time = time.time()
@@ -393,7 +393,6 @@ def update_tick(cur_time = None, local = False, history = False,forced=False):
         for timestamp in faction['stateHistory']:
           state = faction['stateHistory'][timestamp]
           active_state_entries.append([int(timestamp),state,'activeState',faction['name'],0])
-          #print(timestamp,state)
         for timestamp in faction['influenceHistory']:
           system_faction_entries.append([int(timestamp),
             faction['name'],
@@ -452,30 +451,29 @@ def update_tick(cur_time = None, local = False, history = False,forced=False):
         c.execute("INSERT INTO faction_system VALUES (?,?,?,?)",values)
 
       for values in active_state_entries:
-        print(values)
         entry_timestamp,entry_state,entry_state_type,entry_faction, entry_trend = values
         if not c.execute("SELECT date,faction_name,state_type=':state_type' from faction_state WHERE date=:date AND faction_name=':faction' AND state_type=':state_type'",{'date':entry_timestamp,'faction':entry_faction,'state_type':entry_state_type}).fetchall():
           try:
             c.execute("INSERT INTO faction_state VALUES (?,?,?,?,?)",values)
           except:
-            print("State for {0} already updated".format(entry_faction))
+            pass
+            #print("State for {0} already updated".format(entry_faction))
       for values in pending_state_entries:
-        print(values)
         entry_timestamp,entry_state,entry_state_type,entry_faction, entry_trend = values
         if not c.execute("SELECT date,faction_name,state_type=':state_type' from faction_state WHERE date=:date AND faction_name=':faction' AND state_type=':state_type'",{'date':entry_timestamp,'faction':entry_faction,'state_type':entry_state_type}).fetchall():
           try:
             c.execute("INSERT INTO faction_state VALUES (?,?,?,?,?)",values)
           except:
-            print("State for {0} already updated".format(entry_faction))
+            pass
+            #print("State for {0} already updated".format(entry_faction))
       for values in recovering_state_entries:
-        print(values)
         entry_timestamp,entry_state,entry_state_type,entry_faction, entry_trend = values
         if not c.execute("SELECT date,faction_name,state_type=':state_type' from faction_state WHERE date=:date AND faction_name=':faction' AND state_type=':state_type'",{'date':entry_timestamp,'faction':entry_faction,'state_type':entry_state_type}).fetchall():
-          print(values)
           try:
             c.execute("INSERT INTO faction_state VALUES (?,?,?,?,?)",values)
           except:
-            print("State for {0} already updated".format(entry_faction))
+            pass
+            #print("State for {0} already updated".format(entry_faction))
         
         if history:  
           conn.commit()
@@ -1188,3 +1186,5 @@ if __name__ == "__main__":
   pprint(get_expansion_risk_report())
   print("========== WAR ============")
   pprint(get_war_risk_report())
+
+my_faction = "Fathers of Nontime"

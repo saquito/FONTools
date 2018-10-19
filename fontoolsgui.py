@@ -35,7 +35,6 @@ class FonToolsGUI(tk.Toplevel):
       self.configuration_frame.pack(expand=True, fill='both',side=LEFT)
       self.overview_frame = OverviewPanedWindow(pageOverview)
       self.expansions_frame = ExpansionsPanedWindow(pageExpansions)
-
       self.conn = bgs.get_db_connection()
       
     def update_tick(self):
@@ -89,13 +88,13 @@ class OverviewPanedWindow(tk.PanedWindow):
         self.factions_tree.column("Player",width=140,stretch=NO,anchor=CENTER)
         self.factions_tree.heading("Last Update",text="Last Update",anchor=CENTER)
         self.factions_tree.column("Last Update",width=140,stretch=NO,anchor=CENTER)
+        self.factions_tree.tag_configure("my_faction", background="#99FF99")
         self.factions_tree.pack(expand=True, fill='both')
         self.factions_tree.bind('<<TreeviewSelect>>',self.selectItemCallback)
         self.pack(expand=True, fill='both',side=RIGHT)
         self.combo["values"] = get_controlled_systems()
         if self.combo["values"]:
           self.combo.current(0)
-          print(self.combo.get())
           self.update_overview(self.combo.get())
         
     def get_controlled_systems(self):
@@ -107,17 +106,20 @@ class OverviewPanedWindow(tk.PanedWindow):
     
     def update_overview(self,system_name):
       self.factions_tree.delete(*self.factions_tree.get_children())
-      i=0
+      i=1
       star_system = bgs.System(system_name)
       if star_system:
         system_factions = star_system.get_current_factions()
-        for faction in system_factions:
+        for faction in sorted(system_factions,key=lambda faction: bgs.Faction(faction).get_influence_in_system(system_name)[0][1],reverse=True):
+          tags = []
           f = bgs.Faction(faction)
           timestamp,influence = f.get_influence_in_system(system_name)[0]
           active_state = f.get_states('activeState')[0][2]
           pending_states = ", ".join([state[2] for state in f.get_states('pendingState')])
           recovering_states = ", ".join([state[2] for state in f.get_states('recoveringState')])
-          item = self.factions_tree.insert("", END, text=str(i), values=(f.name,influence*100.0,active_state,pending_states,recovering_states, "YES" if f.is_player else "NO",""))
+          if faction == bgs.my_faction:
+            tags.append("my_faction")
+          item = self.factions_tree.insert("", END, text=str(i), values=(f.name, "{:.2%}".format(influence),0,active_state,pending_states,recovering_states, "YES" if f.is_player else "NO",""),tags=tags)
           i=i+1
       
     def selectItemCallback(self,event):
@@ -145,14 +147,16 @@ class ExpansionsPanedWindow(tk.PanedWindow):
         self.systems_tree.column("Number of Factions",width=150,stretch=NO,anchor=CENTER)
         self.systems_tree.heading("Has Player",text="Has Player",anchor=CENTER)
         self.systems_tree.column("Has Player",width=140,stretch=NO,anchor=CENTER)
+        self.systems_tree.tag_configure("has_player", background="khaki")
+        self.systems_tree.tag_configure("full", foreground="gray")
+        self.systems_tree.tag_configure("next_expansion", background="#99FF99")
         self.systems_tree.pack(expand=True, fill='both')
         self.systems_tree.bind('<<TreeviewSelect>>',self.selectItemCallback)
         self.pack(expand=True, fill='both',side=RIGHT)
         self.combo["values"] = get_controlled_systems()
         if self.combo["values"]:
           self.combo.current(0)
-          print(self.combo.get())
-          self.update_home_expansions(self.combo.get(),"Fathers of Nontime")
+          self.update_home_expansions(self.combo.get(), bgs.my_faction)
         
     def get_controlled_systems(self):
       retun ["Naunin", "HR 6177", "Ratemere", "Maopi", "Smethells 1"]
@@ -165,28 +169,30 @@ class ExpansionsPanedWindow(tk.PanedWindow):
       self.systems_tree.delete(*self.systems_tree.get_children())
       i=1
       if home_system_name:
+        next_expansion_found = False
         for expansion_system in self.get_near_systems(home_system_name, controller_faction):
-          print(expansion_system)
-#         system_factions = star_system.get_current_factions()
-#         for faction in system_factions:
-#           f = bgs.Faction(faction)
-#           timestamp,influence = f.get_influence_in_system(system_name)[0]
-#           active_state = f.get_states('activeState')[0][2]
-#           pending_states = ", ".join([state[2] for state in f.get_states('pendingState')])
-#           recovering_states = ", ".join([state[2] for state in f.get_states('recoveringState')])
-          item = self.systems_tree.insert("", END, text=str(i), values=(expansion_system['name'],
-                                                                        expansion_system['distance'],
-                                                                        expansion_system['num_factions'],
-                                                                        expansion_system['has_player']))#, "YES" if f.is_player else "NO",""))
-          i+=1
+          if not expansion_system['controlled']:
+            system_tags = []
+            if expansion_system['num_factions'] >= 7:
+              system_tags.append("full")
+            elif not next_expansion_found:
+              next_expansion_found = True
+              system_tags.append("next_expansion")
+            elif expansion_system['has_player']:
+              system_tags.append("has_player")
+            item = self.systems_tree.insert("", END, text=str(i), tags=system_tags,values=(expansion_system['name'],
+                                                                          expansion_system['distance'],
+                                                                          expansion_system['num_factions'],
+                                                                          "YES" if expansion_system['has_player'] else "NO"))#, "YES" if f.is_player else "NO",""))
+            i+=1
           
-    def get_near_systems(self,system_name,controller_faction=None):
+    def get_near_systems(self,system_name,controller_faction=None, number_of_systems=20):
       result = []
       star_system = bgs.System(system_name)
       if star_system:
-        near_systems = star_system.get_closest_systems(10)
+        near_systems = star_system.get_closest_systems(number_of_systems)
         for near_sys in near_systems:
-          factions = bgs.System(near_sys["system"]).get_factions()
+          factions = [faction for faction in bgs.System(near_sys["system"]).get_factions() if bgs.Faction(faction).get_influence_in_system(near_sys["system"])[0][1]>0]
           num_factions = len(factions)
           has_player_faction = False
           controlled = False
@@ -199,7 +205,6 @@ class ExpansionsPanedWindow(tk.PanedWindow):
           result.append({"name":near_sys["system"],"distance":near_sys["distance"],"num_factions":num_factions,"controlled":controlled,"has_player":has_player_faction})
       if result:
         result = sorted(result,key=lambda x: float(x["distance"]))
-        print(result)
       return result
       
     def selectItemCallback(self,event):
