@@ -1,3 +1,4 @@
+from pygame.tests.transform_test import threshold
 
 try:
   from tkinter import *
@@ -35,6 +36,7 @@ class FonToolsGUI(tk.Toplevel):
       self.configuration_frame.pack(expand=True, fill='both',side=LEFT)
       self.overview_frame = OverviewPanedWindow(pageOverview)
       self.expansions_frame = ExpansionsPanedWindow(pageExpansions)
+      self.risks_frame = RisksPanedWindow(pageRisks)
       self.conn = bgs.get_db_connection()
       
     def update_tick(self):
@@ -124,7 +126,95 @@ class OverviewPanedWindow(tk.PanedWindow):
       
     def selectItemCallback(self,event):
       pass
+class RisksPanedWindow(tk.PanedWindow):
+    def __init__(self,master=None):
+        tk.PanedWindow.__init__(self,master)
+        self.combo = ttk.Combobox(self)
+        self.combo.pack(side=TOP)
+        self.combo.bind("<<ComboboxSelected>>", self.overview_selection_changed)
+        self.risks_tree = ttk.Treeview(self,columns=("Severity","Risk","Description"))
+        self.risks_tree.heading("#0",text="#")
+        self.risks_tree.column("#0",width=30,stretch=NO,anchor=CENTER)
+        self.risks_tree.heading("Severity",text="Severity",anchor=CENTER)
+        self.risks_tree.column("Severity",width=50,stretch=NO,anchor="w")
+        self.risks_tree.heading("Risk",text="Risk",anchor=CENTER)
+        self.risks_tree.column("Risk",width=70,stretch=NO,anchor=CENTER)
+        self.risks_tree.heading("Description",text="Description",anchor=CENTER)
+        self.risks_tree.column("Description",width=600,stretch=YES,anchor='w')
+ 
+        self.risks_tree.tag_configure("even", background="#FFFFFF")
+        self.risks_tree.tag_configure("odd", background="#DDDDDD")
+        
+        self.risks_tree.pack(expand=True, fill='both')
+        self.risks_tree.bind('<<TreeviewSelect>>',self.selectItemCallback)
+        self.pack(expand=True, fill='both',side=RIGHT)
+        self.combo["values"] = ["Expansion","Retreat","War"]
+        if self.combo["values"]:
+          self.combo.current(0)
+          self.update_risks(self.combo.get())
+        
+    def get_controlled_systems(self):
+      retun ["Naunin", "HR 6177", "Ratemere", "Maopi", "Smethells 1"]
       
+    def overview_selection_changed(self,event):
+      risk_type = self.combo.get()
+      self.update_risks(risk_type)
+    
+    def update_risks(self,risk_type, threshold=None):
+      self.risks_tree.delete(*self.risks_tree.get_children())
+      i=1
+      if risk_type == "Expansion":
+        expansion_risks = bgs.get_expansion_risk_report()
+        for risk in sorted(expansion_risks,key = lambda x: x[2],reverse = True):
+          faction, system_name, influence, state, distance = risk
+          if i % 2 == 0:
+            tags = ["even"]
+          else:
+            tags = ["odd"]
+          item = self.risks_tree.insert("", END, text=str(i), values=("High", "Expansion", "Faction {0} is in risk of expansion from {1} (influence: {2:.2%})".format(faction, system_name,influence)),tags=tags)
+          i += 1
+      elif risk_type == "Retreat":
+        retreat_risks = bgs.get_retreat_risk_report()
+        for risk in sorted(retreat_risks,key = lambda x: x[2]):
+          faction, system_name, influence, state, pending, recovering, distance = risk
+          if i % 2 == 0:
+            tags = ["even"]
+          else:
+            tags = ["odd"]
+          item = self.risks_tree.insert("", END, text=str(i), values=("High", "Retreat", "Faction {0} is in risk of retreating from {1} (influence: {2:.2%})".format(faction, system_name,influence)),tags=tags)
+          i += 1
+      elif risk_type == "War":  
+        war_risks = bgs.get_war_risk_report()
+        for risk in sorted(war_risks,key = lambda x: abs(x[2]-x[4])):
+          reason,faction1, influence1, faction2, influence2, system_name = risk
+          if i % 2 == 0:
+            tags = ["even"]
+          else:
+            tags = ["odd"]
+          item = self.risks_tree.insert("", END, text=str(i), values=("High", reason, "Faction {0} is in risk of war/elections with faction {1} in {2} (delta influence: {3:.2%})".format(faction1, faction2, system_name, abs(influence1-influence2))),tags=tags)
+          i += 1
+      
+      return
+      self.risks_tree.delete(*self.risks_tree.get_children())
+      i=1
+      star_system = bgs.System(system_name)
+      if star_system:
+        system_factions = star_system.get_current_factions()
+        for faction in sorted(system_factions,key=lambda faction: bgs.Faction(faction).get_influence_in_system(system_name)[0][1],reverse=True):
+          tags = []
+          f = bgs.Faction(faction)
+          timestamp,influence = f.get_influence_in_system(system_name)[0]
+          active_state = f.get_states('activeState')[0][2]
+          pending_states = ", ".join([state[2] for state in f.get_states('pendingState')])
+          recovering_states = ", ".join([state[2] for state in f.get_states('recoveringState')])
+          if faction == bgs.my_faction:
+            tags.append("my_faction")
+          item = self.risks_tree.insert("", END, text=str(i), values=(f.name, "{:.2%}".format(influence),0,active_state,pending_states,recovering_states, "YES" if f.is_player else "NO",""),tags=tags)
+          i=i+1
+      
+    def selectItemCallback(self,event):
+      pass
+
 class ExpansionsPanedWindow(tk.PanedWindow):
     def __init__(self,master=None):
         tk.PanedWindow.__init__(self,master)

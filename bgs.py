@@ -747,13 +747,14 @@ class System:
       else:
         print(candidate,"- NO:",len(candidate_system.get_factions()),"factions")
   
-  def get_controller_and_state(self,c,timestamp = None):
+  def get_controller_and_state(self,timestamp = None):
+    c = get_db_cursor()
     if not self.ok:
       return None
     if not timestamp:
-      timestamp = get_last_update(c)
-    faction_name = c.execute('SELECT controller_faction FROM system_status WHERE system = "{0}" AND date = "{1}"'.format(self.name,timestamp)).fetchone()["controller_faction"]
-    state = c.execute('SELECT state_name FROM faction_system_state WHERE system_name = "{0}" AND faction_name ="{1}" AND date = "{2}"'.format(self.name,faction_name,timestamp)).fetchone()["state_name"]
+      timestamp = get_last_update()
+    faction_name = c.execute('SELECT controller_faction FROM system_status WHERE system = "{0}" AND date = "{1}"'.format(self.name,timestamp)).fetchone()[0]
+    state = c.execute('SELECT state_name FROM faction_state WHERE faction_name ="{0}" AND date = "{1}"'.format(faction_name,timestamp)).fetchone()[0]
     return {"name":faction_name,"state":state}
     
   def get_war_risk(self,threshold = WAR_THRESHOLD):
@@ -764,8 +765,11 @@ class System:
         influence1 = Faction(faction1).get_current_influence_in_system(self.name)
         influence2 = Faction(faction2).get_current_influence_in_system(self.name)
         if influence1 and influence2:
-          if abs(influence1 - influence2) < threshold:
-            factions_in_risk.append([faction1,faction2])
+          if (faction1 == self.get_controller_and_state()['name'] and influence2 > influence1) or (faction2 == self.get_controller_and_state()['name'] and influence1 > influence2):
+            factions_in_risk.append([faction1,faction2,"Overrule"])
+          elif abs(influence1 - influence2) < threshold:
+            factions_in_risk.append([faction1,faction2,"Close"])
+        
     return factions_in_risk
       
   def get_factions(self, start_timestamp = None, end_timestamp = None):
@@ -801,7 +805,8 @@ def get_factions_with_retreat_risk(threshold = RETREAT_THRESHOLD):
           ret_risked.append({"faction":faction.name,"system":system_name,"influence":influence, "state":faction.get_state()})
   return ret_risked
 
-def get_factions_with_expansion_risk(threshold = EXPANSION_THRESHOLD):
+def get_factions_with_expansion_risk(threshold=EXPANSION_THRESHOLD):
+
   ret_risked = []
   for faction in Faction.get_all_factions():
     risked = faction.get_expansion_risk(threshold)
@@ -819,7 +824,9 @@ def get_trend_text(trend):
   else:
     return "-"
 
-def get_retreat_risk_report(threshold = RETREAT_THRESHOLD):
+def get_retreat_risk_report(threshold = None):
+  if not threshold:
+    threshold = RETREAT_THRESHOLD
   data = []
   report = "\n" + "*"*10 + "RETREAT RISK REPORT" + "*"*10 + "\n\n"
   report += "The following factions are in risk of enter in state of Retreat:\n"
@@ -834,21 +841,25 @@ def get_retreat_risk_report(threshold = RETREAT_THRESHOLD):
     report += "'{0}' in system '{1}' (Influence: {2:.3g} %, State: {3}, Pending: {4}, Recovering: {5}, Distance: {6} lys)\n".format(risk['faction'],risk['system'],risk['influence']*100.0,risk['state'], pending_states, recovering_states,System(risk['system']).distance)
   return data
 
-def get_war_risk_report(threshold = WAR_THRESHOLD):
+def get_war_risk_report(threshold = None):
+  if not threshold:
+    threshold = WAR_THRESHOLD
   data = []
   conn = get_db_connection()
   report = "\n" + "*"*10 + "WAR RISK REPORT" + "*"*10 + "\n"
   report += "The following factions are in risk of enter in state of War:\n"
   for system in System.get_all_systems():
-    for faction1_name, faction2_name in system.get_war_risk(threshold):
+    for faction1_name, faction2_name, reason in system.get_war_risk(threshold):
       faction1,faction2 = Faction(faction1_name), Faction(faction2_name)
-      data.append([faction1.name, faction1.get_current_influence_in_system(system.name),
+      data.append([reason,faction1.name, faction1.get_current_influence_in_system(system.name),
                                                                   faction2.name,faction2.get_current_influence_in_system(system.name),system.name])
       report += "'{0}' ({1:.2f}%) versus '{2}' ({3:.2f}%) in '{4}'\n".format(faction1.name, faction1.get_current_influence_in_system(system.name),
                                                                   faction2.name,faction2.get_current_influence_in_system(system.name),system.name)
   return data
 
-def get_expansion_risk_report(threshold = EXPANSION_THRESHOLD):
+def get_expansion_risk_report(threshold = None):
+  if not threshold:
+    threshold = EXPANSION_THRESHOLD
   data = []
   conn = get_db_connection()
   report = "\n" + "*"*10 + "EXPANSION RISK REPORT" + "*"*10 + "\n"
