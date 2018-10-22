@@ -3,7 +3,7 @@ import Tkinter as tk
 import myNotebook as nb
 from config import config
 import bgs
-from fontoolsgui import FonToolsPanel
+from fontoolsgui import FonToolsGUI
 
 this = sys.modules[__name__]  # For holding module globals
 
@@ -48,7 +48,7 @@ def plugin_app(parent):
    """
    #label = tk.Label(parent, text="Status:")
    #this.status = tk.Label(parent, anchor=tk.W, text="")
-   this.app_frame = FonToolsPanel() #note that you don't have to explicitly specify a root
+   this.app_frame = FonToolsGUI() #note that you don't have to explicitly specify a root
    this.app_frame.grid() #still have to grid the Frame to its master
    
    return (None,this.app_frame)

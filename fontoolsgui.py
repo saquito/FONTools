@@ -1,4 +1,3 @@
-from pygame.tests.transform_test import threshold
 
 try:
   from tkinter import *
