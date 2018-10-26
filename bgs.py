@@ -10,10 +10,12 @@ from collections import defaultdict
 import itertools
 from math import sqrt
 from pprint import pprint
+import configparser
 
 this = sys.modules[__name__]
 path = os.path.dirname(this.__file__)
 
+config = {}
 
 IS_FLASK_ENVIRONMENT = False
 
@@ -23,20 +25,33 @@ try:
 except:
   pass
 
-EXPANSION_RADIUS = 27.5
-EXPANSION_THRESHOLD = 0.60
-EXPANSION_FACTION_THRESHOLD = 6
-EXPANSION_FACTION_MAX = 7
-RETREAT_THRESHOLD = 0.05
-WAR_THRESHOLD = 0.05
-TICK_TIME = "19:30:00"
-TIME_FORMAT = '%d-%m-%Y %H:%M:%S'
-DATE_FORMAT = '%Y-%m-%d'
-DEBUG_LEVEL = 0
-LOCAL_JSON_PATH = "LOCAL_JSON"
+config = configparser.ConfigParser(interpolation=None)
+config.read("bgs.ini")
+
+
+
+
+def get_config(option):
+  return config["CONFIGURATION"][option]
+
 CREATE_DATABASE_SQL = os.sep.join((path,"bgs-data.sqlite3.sql"))
 DATABASE = os.sep.join((path,"bgs-data.sqlite3"))
-FACTION_CONTROLLED = "Fathers of Nontime"
+
+FACTION_CONTROLLED = get_config("FACTION_CONTROLLED")
+LOCAL_JSON_PATH = get_config("LOCAL_JSON_PATH")
+
+
+EXPANSION_RADIUS = float(get_config("EXPANSION_RADIUS"))
+EXPANSION_THRESHOLD = float(get_config("EXPANSION_THRESHOLD"))
+EXPANSION_FACTION_THRESHOLD = int(get_config("EXPANSION_FACTION_THRESHOLD"))
+EXPANSION_FACTION_MAX = int(get_config("EXPANSION_FACTION_MAX")) 
+RETREAT_THRESHOLD = float(get_config("RETREAT_THRESHOLD"))
+WAR_THRESHOLD = float(get_config("WAR_THRESHOLD"))
+TICK_TIME = get_config("TICK_TIME")
+TIME_FORMAT = get_config("TIME_FORMAT")
+DATE_FORMAT = get_config("DATE_FORMAT")
+DEBUG_LEVEL = int(get_config("DEBUG_LEVEL"))
+BUBBLE_SYSTEMS = map(lambda x: x.strip(),get_config("BUBBLE_SYSTEMS").split(","))
 
 print ("=========",DATABASE,"========")
 
@@ -54,6 +69,7 @@ def debug(message,level = 0):
 def clean_local_json_path():
   if os.path.exists(LOCAL_JSON_PATH):
     shutil.rmtree(LOCAL_JSON_PATH)
+    
 
 def get_local_json_path(filename):
   if not os.path.exists(LOCAL_JSON_PATH):
@@ -868,15 +884,14 @@ def get_expansion_risk_report(threshold = None):
   return data
 
 
-systems_controlled = ["Naunin"]
-def fresh_hard_update(local = False):
+
+def fresh_hard_update(local = False,history=False):
   conn = get_db_connection()
   clean_fixed_tables()
   clean_updates()
-  for controlled_system in systems_controlled:
+  for controlled_system in BUBBLE_SYSTEMS:
     fill_systems_in_bubble(controlled_system, EXPANSION_RADIUS, local)
-  update_tick(history=False)
-  conn.close()
+  update_tick(history=history)
   
 if 0:
   conn = sqlite3.connect(DATABASE)
@@ -1140,7 +1155,6 @@ def get_next_target(origin,target,expansion_filter=default_expansion_filter):
     closest_list = [valid_system for valid_system in closest_list if (valid_system in systems) or (valid_system == target)]
     current = closest_list[0]
     if(current == target):
-      print(current)
       path.append(current)
       found = True
     else:
@@ -1188,14 +1202,8 @@ if 0:
 #create_database()
 #fresh_hard_update()
 if __name__ == "__main__":
+  #fresh_hard_update(history=True)
   update_tick()
-  f = Faction("Fathers of Nontime")
-  print(f.get_influence_in_system( "Naunin"))
-  print("========== RETREAT ============")
-  pprint(get_retreat_risk_report())
-  print("========== EXPANSION ============")
-  pprint(get_expansion_risk_report())
-  print("========== WAR ============")
-  pprint(get_war_risk_report())
+  f = Faction(FACTION_CONTROLLED)
+  print(get_next_target("Naunin", "Superty"))
 
-my_faction = "Fathers of Nontime"
